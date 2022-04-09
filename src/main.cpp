@@ -37,7 +37,6 @@ using namespace std::chrono;
 //use for command argument
 bool rpcmode = false;
 std::string sub_url;
-bool pause_on_done = true;
 
 //for use globally
 bool multilink = false;
@@ -161,11 +160,13 @@ void clientCheck()
 {
 #ifdef _WIN32
     std::string v2core_path = "tools\\clients\\v2ray.exe";
+	std::string xraycore_path = "tools\\clients\\xray.exe";
     std::string ssr_libev_path = "tools\\clients\\ssr-local.exe";
     std::string ss_libev_path = "tools\\clients\\ss-local.exe";
     std::string trojan_path = "tools\\clients\\trojan.exe";
 #else
     std::string v2core_path = "tools/clients/v2ray";
+	std::string xraycore_path = "tools/clients/xray";
     std::string ssr_libev_path = "tools/clients/ssr-local";
     std::string ss_libev_path = "tools/clients/ss-local";
     std::string trojan_path = "tools/clients/trojan";
@@ -180,6 +181,16 @@ void clientCheck()
     {
         avail_status[SPEEDTEST_MESSAGE_FOUNDVMESS] = 0;
         writeLog(LOG_TYPE_WARN, "V2Ray core not found at path " + v2core_path);
+    }
+	if(fileExist(xraycore_path))
+    {
+        avail_status[SPEEDTEST_MESSAGE_FOUNDVLESS] = 1;
+        writeLog(LOG_TYPE_INFO, "Found Xray core at path " + xraycore_path);
+    }
+    else
+    {
+        avail_status[SPEEDTEST_MESSAGE_FOUNDVLESS] = 0;
+        writeLog(LOG_TYPE_WARN, "Xray core not found at path " + xraycore_path);
     }
     if(fileExist(ss_libev_path))
     {
@@ -217,6 +228,7 @@ int runClient(int client)
 {
 #ifdef _WIN32
     std::string v2core_path = "tools\\clients\\v2ray.exe -config config.json";
+	std::string xraycore_path = "tools\\clients\\xray.exe -config config.json";
     std::string ssr_libev_path = "tools\\clients\\ssr-local.exe -u -c config.json";
 
     std::string ss_libev_dir = "tools\\clients\\";
@@ -234,6 +246,10 @@ int runClient(int client)
     case SPEEDTEST_MESSAGE_FOUNDVMESS:
         writeLog(LOG_TYPE_INFO, "Starting up v2ray core...");
         runProgram(v2core_path, "", false);
+        break;
+	case SPEEDTEST_MESSAGE_FOUNDVLESS:
+        writeLog(LOG_TYPE_INFO, "Starting up xray core...");
+        runProgram(xraycore_path, "", false);
         break;
     case SPEEDTEST_MESSAGE_FOUNDSSR:
         if(ssr_libev)
@@ -268,6 +284,7 @@ int runClient(int client)
     }
 #else
     std::string v2core_path = "tools/clients/v2ray -config config.json";
+	std::string xraycore_path = "tools/clients/xray -config config.json";
     std::string ssr_libev_path = "tools/clients/ssr-local -u -c config.json";
     std::string trojan_path = "tools/clients/trojan -c config.json";
 
@@ -279,6 +296,10 @@ int runClient(int client)
     case SPEEDTEST_MESSAGE_FOUNDVMESS:
         writeLog(LOG_TYPE_INFO, "Starting up v2ray core...");
         runProgram(v2core_path, "", false);
+        break;
+	case SPEEDTEST_MESSAGE_FOUNDVLESS:
+        writeLog(LOG_TYPE_INFO, "Starting up xray core...");
+        runProgram(xraycore_path, "", false);
         break;
     case SPEEDTEST_MESSAGE_FOUNDSSR:
         writeLog(LOG_TYPE_INFO, "Starting up shadowsocksr-libev...");
@@ -301,6 +322,7 @@ int killClient(int client)
 {
 #ifdef _WIN32
     std::string v2core_name = "v2ray.exe";
+	std::string xraycore_name = "xray.exe";
     std::string ss_libev_name = "ss-local.exe";
     std::string ssr_libev_name = "ssr-local.exe";
     std::string ss_win_name = "shadowsocks-win.exe";
@@ -312,6 +334,10 @@ int killClient(int client)
     case SPEEDTEST_MESSAGE_FOUNDVMESS:
         writeLog(LOG_TYPE_INFO, "Killing v2ray core...");
         killProgram(v2core_name);
+        break;
+	case SPEEDTEST_MESSAGE_FOUNDVLESS:
+        writeLog(LOG_TYPE_INFO, "Killing xray core...");
+        killProgram(xraycore_name);
         break;
     case SPEEDTEST_MESSAGE_FOUNDSSR:
         if(ssr_libev)
@@ -344,6 +370,7 @@ int killClient(int client)
     }
 #else
     std::string v2core_name = "v2ray";
+	std::string xraycore_name = "xray";
     std::string ss_libev_name = "ss-local";
     std::string ssr_libev_name = "ssr-local";
     std::string trojan_name = "trojan";
@@ -353,6 +380,10 @@ int killClient(int client)
     case SPEEDTEST_MESSAGE_FOUNDVMESS:
         writeLog(LOG_TYPE_INFO, "Killing v2ray core...");
         killProgram(v2core_name);
+        break;
+	case SPEEDTEST_MESSAGE_FOUNDVLESS:
+        writeLog(LOG_TYPE_INFO, "Killing xray core...");
+        killProgram(xraycore_name);
         break;
     case SPEEDTEST_MESSAGE_FOUNDSSR:
         writeLog(LOG_TYPE_INFO, "Killing shadowsocksr-libev...");
@@ -420,7 +451,6 @@ void readConf(std::string path)
 #endif // _WIN32
     ini.GetIfExist("override_conf_port", override_conf_port);
     ini.GetIntIfExist("thread_count", def_thread_count);
-    ini.GetBoolIfExist("pause_on_done", pause_on_done);
 
     ini.EnterSection("export");
     ini.GetBoolIfExist("export_with_maxspeed", export_with_maxspeed);
@@ -516,6 +546,7 @@ void signalHandler(int signum)
     killClient(SPEEDTEST_MESSAGE_FOUNDSS);
     killClient(SPEEDTEST_MESSAGE_FOUNDSSR);
     killClient(SPEEDTEST_MESSAGE_FOUNDVMESS);
+	killClient(SPEEDTEST_MESSAGE_FOUNDVLESS);
     killClient(SPEEDTEST_MESSAGE_FOUNDTROJAN);
 #endif // __APPLE__
     killByHandle();
@@ -831,6 +862,8 @@ void addNodes(std::string link, bool multilink)
     writeLog(LOG_TYPE_INFO, "Received Link.");
     if(startsWith(link, "vmess://") || startsWith(link, "vmess1://"))
         linkType = SPEEDTEST_MESSAGE_FOUNDVMESS;
+	else if(startsWith(link, "vless://"))
+        linkType = SPEEDTEST_MESSAGE_FOUNDVLESS;
     else if(startsWith(link, "ss://"))
         linkType = SPEEDTEST_MESSAGE_FOUNDSS;
     else if(startsWith(link, "ssr://"))
@@ -1039,6 +1072,7 @@ int main(int argc, char* argv[])
     killClient(SPEEDTEST_MESSAGE_FOUNDSS);
     killClient(SPEEDTEST_MESSAGE_FOUNDSSR);
     killClient(SPEEDTEST_MESSAGE_FOUNDVMESS);
+	killClient(SPEEDTEST_MESSAGE_FOUNDVLESS);
     killClient(SPEEDTEST_MESSAGE_FOUNDTROJAN);
 #endif // __APPLE__
     clientCheck();
@@ -1169,7 +1203,7 @@ int main(int argc, char* argv[])
     sleep(1);
     //std::cin.clear();
     //std::cin.ignore();
-    if(!rpcmode && sub_url.size() && pause_on_done)
+    if(!rpcmode && sub_url.size())
         _getch();
 #ifdef _WIN32
     //stop socket library before exit
