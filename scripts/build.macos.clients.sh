@@ -54,7 +54,7 @@ cd ../..
 
 curl -LO https://github.com/v2fly/v2ray-core/releases/latest/download/v2ray-macos-64.zip
 curl -LO https://github.com/XTLS/Xray-core/releases/latest/download/Xray-macos-64.zip
-unzip v2ray*.zip v2ray xray v2ctl
+unzip v2ray*.zip v2ray v2ctl
 unzip X2ray*.zip xray
 mv v2ray v2ctl base/tools/clients/
 mv xray base/tools/clients/
