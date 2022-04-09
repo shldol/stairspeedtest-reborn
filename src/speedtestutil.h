@@ -24,6 +24,7 @@ void explodeQuanX(const std::string &quan, const std::string &custom_port, nodeI
 void explodeStdVMess(std::string vmess, const std::string &custom_port, nodeInfo &node);
 void explodeStdVLess(std::string vless, const std::string &custom_port, nodeInfo &node);
 void explodeShadowrocket(std::string kit, const std::string &custom_port, nodeInfo &node);
+void explodeShadowrocketX(std::string kit, const std::string &custom_port, nodeInfo &node);
 void explodeKitsunebi(std::string kit, const std::string &custom_port, nodeInfo &node);
 void explodeKitsunebiX(std::string kit, const std::string &custom_port, nodeInfo &node);
 /// Parse a link
