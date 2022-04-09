@@ -215,6 +215,9 @@ std::string ssrspeed_generate_web_configs(std::vector<nodeInfo> &nodes)
         case SPEEDTEST_MESSAGE_FOUNDVMESS:
             writer.String("V2Ray");
             break;
+		case SPEEDTEST_MESSAGE_FOUNDVLESS:
+            writer.String("Xray");
+            break;
         case SPEEDTEST_MESSAGE_FOUNDTROJAN:
             writer.String("Trojan");
             break;
