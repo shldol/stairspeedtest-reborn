@@ -99,6 +99,78 @@ void explodeVmess(std::string vmess, const std::string &custom_port, nodeInfo &n
     node.proxyStr = vmessConstruct(node.group, ps, add, port, type, id, aid, net, "auto", path, host, "", tls);
 }
 
+void explodeVless(std::string vless, const std::string &custom_port, nodeInfo &node)
+{
+    std::string version, ps, add, port, type, id, aid, net, path, host, tls;
+    Document jsondata;
+    std::vector<std::string> vArray;
+    if(regMatch(vless, "vless://(.*?)@(.*)"))
+    {
+        explodeStdVLess(vless, custom_port, node);
+        return;
+    }
+    else if(regMatch(vless, "vless://(.*?)\\?(.*)")) //shadowrocket style link
+    {
+        explodeShadowrocketX(vless, custom_port, node);
+        return;
+    }
+    else if(regMatch(vless, "vless1://(.*?)\\?(.*)")) //kitsunebi style link
+    {
+        explodeKitsunebiX(vless, custom_port, node);
+        return;
+    }
+    vless = urlsafe_base64_decode(regReplace(vless, "(vless|vless1)://", ""));
+    if(regMatch(vless, "(.*?) = (.*)"))
+    {
+        explodeQuanX(vless, custom_port, node);
+        return;
+    }
+    jsondata.Parse(vless.data());
+    if(jsondata.HasParseError())
+        return;
+
+    version = "1"; //link without version will treat as version 1
+    GetMember(jsondata, "v", version); //try to get version
+
+    GetMember(jsondata, "ps", ps);
+    GetMember(jsondata, "add", add);
+    port = custom_port.size() ? custom_port : GetMember(jsondata, "port");
+    if(port == "0")
+        return;
+    GetMember(jsondata, "type", type);
+    GetMember(jsondata, "id", id);
+    GetMember(jsondata, "aid", aid);
+    GetMember(jsondata, "net", net);
+    GetMember(jsondata, "tls", tls);
+
+    GetMember(jsondata, "host", host);
+    switch(to_int(version))
+    {
+    case 1:
+        if(host.size())
+        {
+            vArray = split(host, ";");
+            if(vArray.size() == 2)
+            {
+                host = vArray[0];
+                path = vArray[1];
+            }
+        }
+        break;
+    case 2:
+        path = GetMember(jsondata, "path");
+        break;
+    }
+
+    add = trim(add);
+    node.linkType = SPEEDTEST_MESSAGE_FOUNDVLESS;
+    node.group = XRAY_DEFAULT_GROUP;
+    node.remarks = ps;
+    node.server = add;
+    node.port = to_int(port, 1);
+    node.proxyStr = vlessConstruct(node.group, ps, add, port, type, id, aid, net, "auto", path, host, "", tls);
+}
+
 void explodeVmessConf(std::string content, const std::string &custom_port, bool libev, std::vector<nodeInfo> &nodes)
 {
     nodeInfo node;
@@ -237,6 +309,168 @@ void explodeVmessConf(std::string content, const std::string &custom_port, bool 
         case 3: //ss config
             json["vmess"][i]["id"] >> id;
             json["vmess"][i]["security"] >> cipher;
+            group = SS_DEFAULT_GROUP;
+            node.linkType = SPEEDTEST_MESSAGE_FOUNDSS;
+            node.proxyStr = ssConstruct(group, ps, add, port, id, cipher, "", "", libev, udp, tfo, scv);
+            break;
+        case 4: //socks config
+            group = SOCKS_DEFAULT_GROUP;
+            node.linkType = SPEEDTEST_MESSAGE_FOUNDSOCKS;
+            node.proxyStr = socksConstruct(group, ps, add, port, "", "", udp, tfo, scv);
+            break;
+        default:
+            continue;
+        }
+
+        node.group = group;
+        node.remarks = ps;
+        node.id = index;
+        node.server = add;
+        node.port = to_int(port, 1);
+        nodes.emplace_back(std::move(node));
+        node = nodeInfo();
+    }
+    return;
+}
+
+void explodeVlessConf(std::string content, const std::string &custom_port, bool libev, std::vector<nodeInfo> &nodes)
+{
+    nodeInfo node;
+    Document json;
+    rapidjson::Value nodejson, settings;
+    std::string group, ps, add, port, type, id, aid, net, path, host, edge, tls, cipher, subid;
+    tribool udp, tfo, scv;
+    int configType, index = nodes.size();
+    std::map<std::string, std::string> subdata;
+    std::map<std::string, std::string>::iterator iter;
+    std::string streamset = "streamSettings", tcpset = "tcpSettings", wsset = "wsSettings";
+    regGetMatch(content, "((?i)streamsettings)", 2, 0, &streamset);
+    regGetMatch(content, "((?i)tcpsettings)", 2, 0, &tcpset);
+    regGetMatch(content, "((?1)wssettings)", 2, 0, &wsset);
+
+    json.Parse(content.data());
+    if(json.HasParseError())
+        return;
+    try
+    {
+        if(json.HasMember("outbounds")) //single config
+        {
+            if(json["outbounds"].Size() > 0 && json["outbounds"][0].HasMember("settings") && json["outbounds"][0]["settings"].HasMember("vnext") && json["outbounds"][0]["settings"]["vnext"].Size() > 0)
+            {
+                nodejson = json["outbounds"][0];
+                add = GetMember(nodejson["settings"]["vnext"][0], "address");
+                port = custom_port.size() ? custom_port : GetMember(nodejson["settings"]["vnext"][0], "port");
+                if(port == "0")
+                    return;
+                if(nodejson["settings"]["vnext"][0]["users"].Size())
+                {
+                    id = GetMember(nodejson["settings"]["vnext"][0]["users"][0], "id");
+                    aid = GetMember(nodejson["settings"]["vnext"][0]["users"][0], "alterId");
+                    cipher = GetMember(nodejson["settings"]["vnext"][0]["users"][0], "security");
+                }
+                if(nodejson.HasMember(streamset.data()))
+                {
+                    net = GetMember(nodejson[streamset.data()], "network");
+                    tls = GetMember(nodejson[streamset.data()], "security");
+                    if(net == "ws")
+                    {
+                        if(nodejson[streamset.data()].HasMember(wsset.data()))
+                            settings = nodejson[streamset.data()][wsset.data()];
+                        else
+                            settings.RemoveAllMembers();
+                        path = GetMember(settings, "path");
+                        if(settings.HasMember("headers"))
+                        {
+                            host = GetMember(settings["headers"], "Host");
+                            edge = GetMember(settings["headers"], "Edge");
+                        }
+                    }
+                    if(nodejson[streamset.data()].HasMember(tcpset.data()))
+                        settings = nodejson[streamset.data()][tcpset.data()];
+                    else
+                        settings.RemoveAllMembers();
+                    if(settings.IsObject() && settings.HasMember("header"))
+                    {
+                        type = GetMember(settings["header"], "type");
+                        if(type == "http")
+                        {
+                            if(settings["header"].HasMember("request"))
+                            {
+                                if(settings["header"]["request"].HasMember("path") && settings["header"]["request"]["path"].Size())
+                                    settings["header"]["request"]["path"][0] >> path;
+                                if(settings["header"]["request"].HasMember("headers"))
+                                {
+                                    host = GetMember(settings["header"]["request"]["headers"], "Host");
+                                    edge = GetMember(settings["header"]["request"]["headers"], "Edge");
+                                }
+                            }
+                        }
+                    }
+                }
+                node.linkType = SPEEDTEST_MESSAGE_FOUNDVLESS;
+                node.group = XRAY_DEFAULT_GROUP;
+                node.remarks = add + ":" + port;
+                node.server = add;
+                node.port = to_int(port, 1);
+                node.proxyStr = vlessConstruct(node.group, node.remarks, add, port, type, id, aid, net, cipher, path, host, edge, tls, udp, tfo, scv);
+                nodes.emplace_back(std::move(node));
+                node = nodeInfo();
+            }
+            return;
+        }
+    }
+    catch(std::exception & e)
+    {
+        writeLog(0, "VLessConf parser throws an error. Leaving...", LOG_LEVEL_WARNING);
+        return;
+        //ignore
+    }
+    //read all subscribe remark as group name
+    for(unsigned int i = 0; i < json["subItem"].Size(); i++)
+        subdata.insert(std::pair<std::string, std::string>(json["subItem"][i]["id"].GetString(), json["subItem"][i]["remarks"].GetString()));
+
+    for(unsigned int i = 0; i < json["vless"].Size(); i++)
+    {
+        if(json["vless"][i]["address"].IsNull() || json["vless"][i]["port"].IsNull() || json["vless"][i]["id"].IsNull())
+            continue;
+
+        //common info
+        json["vless"][i]["remarks"] >> ps;
+        json["vless"][i]["address"] >> add;
+        port = custom_port.size() ? custom_port : GetMember(json["vless"][i], "port");
+        if(port == "0")
+            continue;
+        json["vless"][i]["subid"] >> subid;
+
+        if(subid.size())
+        {
+            iter = subdata.find(subid);
+            if(iter != subdata.end())
+                group = iter->second;
+        }
+        if(ps.empty())
+            ps = add + ":" + port;
+
+        scv = GetMember(json["vless"][i], "allowInsecure");
+        json["vless"][i]["configType"] >> configType;
+        switch(configType)
+        {
+        case 1: //vless config
+            json["vless"][i]["headerType"] >> type;
+            json["vless"][i]["id"] >> id;
+            json["vless"][i]["alterId"] >> aid;
+            json["vless"][i]["network"] >> net;
+            json["vless"][i]["path"] >> path;
+            json["vless"][i]["requestHost"] >> host;
+            json["vless"][i]["streamSecurity"] >> tls;
+            json["vless"][i]["security"] >> cipher;
+            group = XRAY_DEFAULT_GROUP;
+            node.linkType = SPEEDTEST_MESSAGE_FOUNDVLESS;
+            node.proxyStr = vlessConstruct(group, ps, add, port, type, id, aid, net, cipher, path, host, "", tls, udp, tfo, scv);
+            break;
+        case 3: //ss config
+            json["vless"][i]["id"] >> id;
+            json["vless"][i]["security"] >> cipher;
             group = SS_DEFAULT_GROUP;
             node.linkType = SPEEDTEST_MESSAGE_FOUNDSS;
             node.proxyStr = ssConstruct(group, ps, add, port, id, cipher, "", "", libev, udp, tfo, scv);
@@ -776,7 +1010,8 @@ void explodeQuan(const std::string &quan, const std::string &custom_port, nodeIn
     strTemp = regReplace(quan, "(.*?) = (.*)", "$1,$2");
     configs = split(strTemp, ",");
 
-    if(configs[1] == "vmess")
+    //
+	if(configs[1] == "vmess")
     {
         if(configs.size() < 6)
             return;
@@ -828,6 +1063,70 @@ void explodeQuan(const std::string &quan, const std::string &custom_port, nodeIn
         node.server = add;
         node.port = to_int(port, 1);
         node.proxyStr = vmessConstruct(group, ps, add, port, type, id, aid, net, cipher, path, host, edge, tls);
+    }
+}
+
+void explodeQuanX(const std::string &quan, const std::string &custom_port, nodeInfo &node)
+{
+    std::string strTemp, itemName, itemVal;
+    std::string group = XRAY_DEFAULT_GROUP, ps, add, port, cipher, type = "none", id, aid = "0", net = "tcp", path, host, edge, tls;
+    string_array configs, vArray, headers;
+    strTemp = regReplace(quan, "(.*?) = (.*)", "$1,$2");
+    configs = split(strTemp, ",");
+
+    //
+	if(configs[1] == "vless")
+    {
+        if(configs.size() < 6)
+            return;
+        ps = trim(configs[0]);
+        add = trim(configs[2]);
+        port = custom_port.size() ? custom_port : trim(configs[3]);
+        if(port == "0")
+            return;
+        cipher = trim(configs[4]);
+        id = trim(replace_all_distinct(configs[5], "\"", ""));
+
+        //read link
+        for(unsigned int i = 6; i < configs.size(); i++)
+        {
+            vArray = split(configs[i], "=");
+            if(vArray.size() < 2)
+                continue;
+            itemName = trim(vArray[0]);
+            itemVal = trim(vArray[1]);
+            switch(hash_(itemName))
+            {
+                case "group"_hash: group = itemVal; break;
+                case "over-tls"_hash: tls = itemVal == "true" ? "tls" : ""; break;
+                case "tls-host"_hash: host = itemVal; break;
+                case "obfs-path"_hash: path = replace_all_distinct(itemVal, "\"", ""); break;
+                case "obfs-header"_hash:
+                    headers = split(replace_all_distinct(replace_all_distinct(itemVal, "\"", ""), "[Rr][Nn]", "|"), "|");
+                    for(std::string &x : headers)
+                    {
+                        if(regFind(x, "(?i)Host: "))
+                            host = x.substr(6);
+                        else if(regFind(x, "(?i)Edge: "))
+                            edge = x.substr(6);
+                    }
+                    break;
+                case "obfs"_hash:
+                    if(itemVal == "ws")
+                        net = "ws";
+                    break;
+                default: continue;
+            }
+        }
+        if(path.empty())
+            path = "/";
+
+        node.linkType = SPEEDTEST_MESSAGE_FOUNDVLESS;
+        node.group = group;
+        node.remarks = ps;
+        node.server = add;
+        node.port = to_int(port, 1);
+        node.proxyStr = vlessConstruct(group, ps, add, port, type, id, aid, net, cipher, path, host, edge, tls);
     }
 }
 
@@ -904,6 +1203,21 @@ void explodeNetch(std::string netch, bool ss_libev, bool ssr_libev, const std::s
             group = V2RAY_DEFAULT_GROUP;
         node.group = group;
         node.proxyStr = vmessConstruct(group, remark, address, port, faketype, id, aid, transprot, method, path, host, edge, tls, udp, tfo, scv);
+        break;
+	case "VLess"_hash:
+        id = GetMember(json, "UserID");
+        aid = GetMember(json, "AlterID");
+        transprot = GetMember(json, "TransferProtocol");
+        faketype = GetMember(json, "FakeType");
+        host = GetMember(json, "Host");
+        path = GetMember(json, "Path");
+        edge = GetMember(json, "Edge");
+        tls = GetMember(json, "TLSSecure");
+        node.linkType = SPEEDTEST_MESSAGE_FOUNDVLESS;
+        if(group.empty())
+            group = XRAY_DEFAULT_GROUP;
+        node.group = group;
+        node.proxyStr = vlessConstruct(group, remark, address, port, faketype, id, aid, transprot, method, path, host, edge, tls, udp, tfo, scv);
         break;
     case "Socks5"_hash:
         username = GetMember(json, "Username");
@@ -996,6 +1310,30 @@ void explodeClash(Node yamlnode, const std::string &custom_port, std::vector<nod
 
             node.linkType = SPEEDTEST_MESSAGE_FOUNDVMESS;
             node.proxyStr = vmessConstruct(group, ps, server, port, "", id, aid, net, cipher, path, host, edge, tls, udp, tfo, scv);
+            break;
+		case "vless"_hash:
+            group = XRAY_DEFAULT_GROUP;
+
+            singleproxy["uuid"] >>= id;
+            singleproxy["alterId"] >>= aid;
+            singleproxy["cipher"] >>= cipher;
+            net = singleproxy["network"].IsDefined() ? safe_as<std::string>(singleproxy["network"]) : "tcp";
+            if(net == "http")
+            {
+                singleproxy["http-opts"]["path"][0] >>= path;
+                singleproxy["http-opts"]["headers"]["Host"][0] >>= host;
+                edge.clear();
+            }
+            else
+            {
+                path = singleproxy["ws-path"].IsDefined() ? safe_as<std::string>(singleproxy["ws-path"]) : "/";
+                singleproxy["ws-headers"]["Host"] >>= host;
+                singleproxy["ws-headers"]["Edge"] >>= edge;
+            }
+            tls = safe_as<std::string>(singleproxy["tls"]) == "true" ? "tls" : "";
+
+            node.linkType = SPEEDTEST_MESSAGE_FOUNDVLESS;
+            node.proxyStr = vlessConstruct(group, ps, server, port, "", id, aid, net, cipher, path, host, edge, tls, udp, tfo, scv);
             break;
         case "ss"_hash:
             group = SS_DEFAULT_GROUP;
@@ -1189,6 +1527,57 @@ void explodeStdVMess(std::string vmess, const std::string &custom_port, nodeInfo
     return;
 }
 
+void explodeStdVLess(std::string vless, const std::string &custom_port, nodeInfo &node)
+{
+    std::string add, port, type, id, aid, net, path, host, tls, remarks;
+    std::string addition;
+    vless = vless.substr(8);
+    string_size pos;
+
+    pos = vless.rfind("#");
+    if(pos != vless.npos)
+    {
+        remarks = UrlDecode(vless.substr(pos + 1));
+        vless.erase(pos);
+    }
+    const std::string stdvless_matcher = R"(^([a-z]+)(?:\+([a-z]+))?:([\da-f]{4}(?:[\da-f]{4}-){4}[\da-f]{12})-(\d+)@(.+):(\d+)(?:\/?\?(.*))?$)";
+    if(regGetMatch(vless, stdvless_matcher, 8, 0, &net, &tls, &id, &aid, &add, &port, &addition))
+        return;
+
+    switch(hash_(net))
+    {
+    case "tcp"_hash:
+    case "kcp"_hash:
+        type = getUrlArg(addition, "type");
+        break;
+    case "http"_hash:
+    case "ws"_hash:
+        host = getUrlArg(addition, "host");
+        path = getUrlArg(addition, "path");
+        break;
+    case "quic"_hash:
+        type = getUrlArg(addition, "security");
+        host = getUrlArg(addition, "type");
+        path = getUrlArg(addition, "key");
+        break;
+    default:
+        return;
+    }
+
+    if(!custom_port.empty())
+        port = custom_port;
+    if(remarks.empty())
+        remarks = add + ":" + port;
+
+    node.linkType = SPEEDTEST_MESSAGE_FOUNDVLESS;
+    node.group = XRAY_DEFAULT_GROUP;
+    node.remarks = remarks;
+    node.server = add;
+    node.port = to_int(port, 0);
+    node.proxyStr = vlessConstruct(node.group, remarks, add, port, type, id, aid, net, "auto", path, host, "", tls);
+    return;
+}
+
 void explodeShadowrocket(std::string rocket, const std::string &custom_port, nodeInfo &node)
 {
     std::string add, port, type, id, aid, net = "tcp", path, host, tls, cipher, remarks;
@@ -1240,6 +1629,57 @@ void explodeShadowrocket(std::string rocket, const std::string &custom_port, nod
     node.proxyStr = vmessConstruct(node.group, remarks, add, port, type, id, aid, net, cipher, path, host, "", tls);
 }
 
+void explodeShadowrocketX(std::string rocket, const std::string &custom_port, nodeInfo &node)
+{
+    std::string add, port, type, id, aid, net = "tcp", path, host, tls, cipher, remarks;
+    std::string obfs; //for other style of link
+    std::string addition;
+    rocket = rocket.substr(8);
+
+    string_size pos = rocket.find("?");
+    addition = rocket.substr(pos + 1);
+    rocket.erase(pos);
+
+    if(regGetMatch(urlsafe_base64_decode(rocket), "(.*?):(.*)@(.*):(.*)", 5, 0, &cipher, &id, &add, &port))
+        return;
+    if(custom_port.size())
+        port = custom_port;
+    if(port == "0")
+        return;
+    remarks = UrlDecode(getUrlArg(addition, "remarks"));
+    obfs = getUrlArg(addition, "obfs");
+    if(obfs.size())
+    {
+        if(obfs == "websocket")
+        {
+            net = "ws";
+            host = getUrlArg(addition, "obfsParam");
+            path = getUrlArg(addition, "path");
+        }
+    }
+    else
+    {
+        net = getUrlArg(addition, "network");
+        host = getUrlArg(addition, "wsHost");
+        path = getUrlArg(addition, "wspath");
+    }
+    tls = getUrlArg(addition, "tls") == "1" ? "tls" : "";
+    aid = getUrlArg(addition, "aid");
+
+    if(aid.empty())
+        aid = "0";
+
+    if(remarks.empty())
+        remarks = add + ":" + port;
+    //
+    node.linkType = SPEEDTEST_MESSAGE_FOUNDVLESS;
+    node.group = XRAY_DEFAULT_GROUP;
+    node.remarks = remarks;
+    node.server = add;
+    node.port = to_int(port, 0);
+    node.proxyStr = vlessConstruct(node.group, remarks, add, port, type, id, aid, net, cipher, path, host, "", tls);
+}
+
 void explodeKitsunebi(std::string kit, const std::string &custom_port, nodeInfo &node)
 {
     std::string add, port, type, id, aid = "0", net = "tcp", path, host, tls, cipher = "auto", remarks;
@@ -1283,6 +1723,51 @@ void explodeKitsunebi(std::string kit, const std::string &custom_port, nodeInfo 
     node.server = add;
     node.port = to_int(port, 0);
     node.proxyStr = vmessConstruct(node.group, remarks, add, port, type, id, aid, net, cipher, path, host, "", tls);
+}
+
+void explodeKitsunebiX(std::string kit, const std::string &custom_port, nodeInfo &node)
+{
+    std::string add, port, type, id, aid = "0", net = "tcp", path, host, tls, cipher = "auto", remarks;
+    std::string addition;
+    string_size pos;
+    kit = kit.substr(9);
+
+    pos = kit.find("#");
+    if(pos != kit.npos)
+    {
+        remarks = kit.substr(pos + 1);
+        kit = kit.substr(0, pos);
+    }
+
+    pos = kit.find("?");
+    addition = kit.substr(pos + 1);
+    kit = kit.substr(0, pos);
+
+    if(regGetMatch(kit, "(.*?)@(.*):(.*)", 4, 0, &id, &add, &port))
+        return;
+    pos = port.find("/");
+    if(pos != port.npos)
+    {
+        path = port.substr(pos);
+        port.erase(pos);
+    }
+    if(custom_port.size())
+        port = custom_port;
+    if(port == "0")
+        return;
+    net = getUrlArg(addition, "network");
+    tls = getUrlArg(addition, "tls") == "true" ? "tls" : "";
+    host = getUrlArg(addition, "ws.host");
+
+    if(remarks.empty())
+        remarks = add + ":" + port;
+
+    node.linkType = SPEEDTEST_MESSAGE_FOUNDVLESS;
+    node.group = XRAY_DEFAULT_GROUP;
+    node.remarks = remarks;
+    node.server = add;
+    node.port = to_int(port, 0);
+    node.proxyStr = vlessConstruct(node.group, remarks, add, port, type, id, aid, net, cipher, path, host, "", tls);
 }
 
 bool explodeSurge(std::string surge, const std::string &custom_port, std::vector<nodeInfo> &nodes, bool libev)
@@ -1511,6 +1996,55 @@ bool explodeSurge(std::string surge, const std::string &custom_port, std::vector
             node.group = V2RAY_DEFAULT_GROUP;
             node.proxyStr = vmessConstruct(node.group, remarks, server, port, "", id, "0", net, method, path, host, edge, tls, udp, tfo, scv, tls13);
             break;
+		case "vless"_hash: //surge 4 style vless proxy
+            server = trim(configs[1]);
+            port = custom_port.empty() ? trim(configs[2]) : custom_port;
+            if(port == "0")
+                continue;
+            net = "tcp";
+            method = "auto";
+
+            for(i = 3; i < configs.size(); i++)
+            {
+                vArray = split(configs[i], "=");
+                if(vArray.size() != 2)
+                    continue;
+                itemName = trim(vArray[0]);
+                itemVal = trim(vArray[1]);
+                switch(hash_(itemName))
+                {
+                    case "username"_hash: id = itemVal; break;
+                    case "ws"_hash: net = itemVal == "true" ? "ws" : "tcp"; break;
+                    case "tls"_hash: tls = itemVal == "true" ? "tls" : ""; break;
+                    case "ws-path"_hash: path = itemVal; break;
+                    case "obfs-host"_hash: host = itemVal; break;
+                    case "ws-headers"_hash:
+                        headers = split(itemVal, "|");
+                        for(auto &y : headers)
+                        {
+                            header = split(trim(y), ":");
+                            if(header.size() != 2)
+                                continue;
+                            else if(regMatch(header[0], "(?i)host"))
+                                host = trim_quote(header[1]);
+                            else if(regMatch(header[0], "(?i)edge"))
+                                edge = trim_quote(header[1]);
+                        }
+                        break;
+                    case "udp-relay"_hash: udp = itemVal; break;
+                    case "tfo"_hash: tfo = itemVal; break;
+                    case "skip-cert-verify"_hash: scv = itemVal; break;
+                    case "tls13"_hash: tls13 = itemVal; break;
+                    default: continue;
+                }
+            }
+            if(host.empty() && !isIPv4(server) && !isIPv6(server))
+                host = server;
+
+            node.linkType = SPEEDTEST_MESSAGE_FOUNDVLESS;
+            node.group = XRAY_DEFAULT_GROUP;
+            node.proxyStr = vlessConstruct(node.group, remarks, server, port, "", id, "0", net, method, path, host, edge, tls, udp, tfo, scv, tls13);
+            break;
         case "http"_hash: //http proxy
             node.linkType = SPEEDTEST_MESSAGE_FOUNDHTTP;
             node.group = HTTP_DEFAULT_GROUP;
@@ -1728,6 +2262,52 @@ bool explodeSurge(std::string surge, const std::string &custom_port, std::vector
                 node.linkType = SPEEDTEST_MESSAGE_FOUNDVMESS;
                 node.group = V2RAY_DEFAULT_GROUP;
                 node.proxyStr = vmessConstruct(node.group, remarks, server, port, "", id, "0", net, method, path, host, "", tls, udp, tfo, scv, tls13);
+                break;
+			case "vless"_hash: //quantumult x style vless link
+                server = trim(configs[0].substr(0, configs[0].rfind(":")));
+                port = custom_port.empty() ? trim(configs[0].substr(configs[0].rfind(":") + 1)) : custom_port;
+                if(port == "0")
+                    continue;
+                net = "tcp";
+
+                for(i = 1; i < configs.size(); i++)
+                {
+                    vArray = split(trim(configs[i]), "=");
+                    if(vArray.size() != 2)
+                        continue;
+                    itemName = trim(vArray[0]);
+                    itemVal = trim(vArray[1]);
+                    switch(hash_(itemName))
+                    {
+                        case "method"_hash: method = itemVal; break;
+                        case "password"_hash: id = itemVal; break;
+                        case "tag"_hash: remarks = itemVal; break;
+                        case "obfs"_hash:
+                            switch(hash_(itemVal))
+                            {
+                                case "ws"_hash: net = "ws"; break;
+                                case "over-tls"_hash: tls = "tls"; break;
+                                case "wss"_hash: net = "ws"; tls = "tls"; break;
+                            }
+                            break;
+                        case "obfs-host"_hash: host = itemVal; break;
+                        case "obfs-uri"_hash: path = itemVal; break;
+                        case "over-tls"_hash: tls = itemVal == "true" ? "tls" : ""; break;
+                        case "udp-relay"_hash: udp = itemVal; break;
+                        case "fast-open"_hash: tfo = itemVal; break;
+                        case "tls13"_hash: tls13 = itemVal; break;
+                        default: continue;
+                    }
+                }
+                if(remarks.empty())
+                    remarks = server + ":" + port;
+
+                if(host.empty() && !isIPv4(server) && !isIPv6(server))
+                    host = server;
+
+                node.linkType = SPEEDTEST_MESSAGE_FOUNDVLESS;
+                node.group = XRAY_DEFAULT_GROUP;
+                node.proxyStr = vlessConstruct(node.group, remarks, server, port, "", id, "0", net, method, path, host, "", tls, udp, tfo, scv, tls13);
                 break;
             case "trojan"_hash: //quantumult x style trojan link
                 server = trim(configs[0].substr(0, configs[0].rfind(":")));
@@ -1959,6 +2539,9 @@ int explodeConfContent(const std::string &content, const std::string &custom_por
         filetype = SPEEDTEST_MESSAGE_FOUNDSSR;
     else if(strFind(content, "\"uiItem\"") || strFind(content, "vnext"))
         filetype = SPEEDTEST_MESSAGE_FOUNDVMESS;
+	//
+	else if(strFind(content, "\"uiItem\"") || strFind(content, "vnext"))
+        filetype = SPEEDTEST_MESSAGE_FOUNDVLESS;
     else if(strFind(content, "\"proxy_apps\""))
         filetype = SPEEDTEST_MESSAGE_FOUNDSSCONF;
     else if(strFind(content, "\"idInUse\""))
@@ -1978,6 +2561,9 @@ int explodeConfContent(const std::string &content, const std::string &custom_por
         break;
     case SPEEDTEST_MESSAGE_FOUNDVMESS:
         explodeVmessConf(content, custom_port, sslibev, nodes);
+        break;
+	case SPEEDTEST_MESSAGE_FOUNDVLESS:
+        explodeVlessConf(content, custom_port, sslibev, nodes);
         break;
     case SPEEDTEST_MESSAGE_FOUNDSSCONF:
         explodeSSAndroid(content, sslibev, custom_port, nodes);
@@ -2006,6 +2592,8 @@ void explode(const std::string &link, bool sslibev, bool ssrlibev, const std::st
         explodeSSR(link, sslibev, ssrlibev, custom_port, node);
     else if(strFind(link, "vmess://") || strFind(link, "vmess1://"))
         explodeVmess(link, custom_port, node);
+	else if(strFind(link, "vless://") || strFind(link, "vless1://"))
+        explodeVless(link, custom_port, node);
     else if(strFind(link, "ss://"))
         explodeSS(link, sslibev, custom_port, node);
     else if(strFind(link, "socks://") || strFind(link, "https://t.me/socks") || strFind(link, "tg://socks"))
@@ -2063,7 +2651,7 @@ void explodeSub(std::string sub, bool sslibev, bool ssrlibev, const std::string 
     if(!processed)
     {
         sub = urlsafe_base64_decode(trim(sub));
-        if(regFind(sub, "(vmess|shadowsocks|http|trojan)\\s*?="))
+        if(regFind(sub, "(vmess|vless|shadowsocks|http|trojan)\\s*?="))
         {
             if(explodeSurge(sub, custom_port, nodes, sslibev))
                 return;
