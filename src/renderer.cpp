@@ -335,11 +335,11 @@ std::string exportRender(std::string resultpath, std::vector<nodeInfo> &nodes, b
     node.remarks = "Remarks";
     if(export_as_new_style)
     {
-        node.pkLoss = "     Loss     ";
+        node.pkLoss = "     丢包率     ";
         node.avgPing = "     Ping     ";
         node.sitePing = "  Google Ping  ";
-        node.avgSpeed = "  AvgSpeed  ";
-        node.maxSpeed = "  MaxSpeed  ";
+        node.avgSpeed = "  平均速度  ";
+        node.maxSpeed = "  最大速度  ";
         node.natType = "  UDP NAT Type  ";
     }
     else
@@ -433,8 +433,8 @@ std::string exportRender(std::string resultpath, std::vector<nodeInfo> &nodes, b
         total_width += nattype_width;
 
     //generating information
-    std::string gentime = "Generated at " + getTime(3);
-    std::string traffic = "Traffic used : " + speedCalc((double)total_traffic) + ". ";
+    std::string gentime = "图片生成时间 " + getTime(3);
+    std::string traffic = "消耗流量： " + speedCalc((double)total_traffic) + ". ";
     std::string about = "By Stair Speedtest Reborn " VERSION ".";
     std::string title = "  Stair Speedtest Reborn Result Table ( " VERSION " )  ";
     //SSRSpeed style
@@ -446,8 +446,8 @@ std::string exportRender(std::string resultpath, std::vector<nodeInfo> &nodes, b
     else
     {
         if(export_as_new_style)
-            traffic += "Time used : " + secondToString(test_duration) + ". ";
-        traffic += "Working Node(s) : [" + std::to_string(onlines) + "/" + std::to_string(node_count) + "]";
+            traffic += "测速用时 : " + secondToString(test_duration) + ". ";
+        traffic += "可用节点 : [" + std::to_string(onlines) + "/" + std::to_string(node_count) + "]";
     }
 
     final_width = total_width;
@@ -618,8 +618,8 @@ std::string exportRender(std::string resultpath, vector<nodeInfo> nodes, bool ex
         sort(nodes.begin(), nodes.end(), comparer);//sort by export_sort_method
 
     //add title line into the list
-    node.group = "Group";
-    node.remarks = "Remarks";
+    node.group = "组名";
+    node.remarks = "节点";
     node.pkLoss = "Pk.Loss";
     node.avgPing = "TCP Ping";
     //node.sitePing = "Bing Ping";
