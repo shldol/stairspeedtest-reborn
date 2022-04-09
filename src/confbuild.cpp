@@ -21,6 +21,14 @@ std::string tlsset_vmess = R"({"serverName":"?serverName?","allowInsecure":?veri
 std::string kcpset_vmess = R"({"mtu":1350,"tti":50,"uplinkCapacity":12,"downlinkCapacity":100,"congestion":false,"readBufferSize":2,"writeBufferSize":2,"header":{"type":"?type?"}})";
 std::string h2set_vmess = R"({"path":"?path?","host":[?host?]})";
 std::string quicset_vmess = R"({"security":"?host?","key":"?path?","header":{"type":"?type?"}})";
+//vless
+std::string base_vless = R"({"inbounds":[{"port":?localport?,"listen":"127.0.0.1","protocol":"socks","settings":{"udp":true}}],"outbounds":[{"tag":"proxy","protocol":"vless","settings":{"vnext":[{"address":"?add?","port":?port?,"users":[{"id":"?id?","alterId":?aid?,"email":"t@t.tt","security":"?cipher?"}]}]},"streamSettings":{"network":"?net?","security":"?tls?","tlsSettings":?tlsset?,"tcpSettings":?tcpset?,"wsSettings":?wsset?,"kcpSettings":?kcpset?,"httpSettings":?h2set?,"quicSettings":?quicset?},"mux":{"enabled":false}}],"routing":{"domainStrategy":"IPIfNonMatch"}})";
+std::string wsset_vless = R"({"connectionReuse":true,"path":"?path?","headers":{"Host":"?host?"?edge?}})";
+std::string tcpset_vless = R"({"connectionReuse":true,"header":{"type":"?type?","request":{"version":"1.1","method":"GET","path":["?path?"],"headers":{"Host":["?host?"],"User-Agent":["Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.75 Safari/537.36","Mozilla/5.0 (iPhone; CPU iPhone OS 10_0_2 like Mac OS X) AppleWebKit/601.1 (KHTML, like Gecko) CriOS/53.0.2785.109 Mobile/14A456 Safari/601.1.46"],"Accept-Encoding":["gzip, deflate"],"Connection":["keep-alive"],"Pragma":"no-cache"}}}})";
+std::string tlsset_vless = R"({"serverName":"?serverName?","allowInsecure":?verify?,"allowInsecureCiphers":true})";
+std::string kcpset_vless = R"({"mtu":1350,"tti":50,"uplinkCapacity":12,"downlinkCapacity":100,"congestion":false,"readBufferSize":2,"writeBufferSize":2,"header":{"type":"?type?"}})";
+std::string h2set_vless = R"({"path":"?path?","host":[?host?]})";
+std::string quicset_vless = R"({"security":"?host?","key":"?path?","header":{"type":"?type?"}})";
 std::string base_trojan = R"({"run_type":"client","local_addr":"127.0.0.1","local_port":?localport?,"remote_addr":"?server?","remote_port":?port?,"password":["?password?"],"ssl":{"verify":?verify?,"verify_hostname":?verifyhost?,"sni":"?host?"},"tcp":{"reuse_port":true}})";
 
 int explodeLog(const std::string &log, std::vector<nodeInfo> &nodes)
@@ -134,6 +142,85 @@ std::string vmessConstruct(const std::string &group, const std::string &remarks,
     if(host.size())
     {
         std::string tlsset = tlsset_vmess;
+        tlsset = replace_first(tlsset, "?serverName?", host);
+        scv.define(true);
+        tlsset = replace_first(tlsset, "?verify?", scv ? "true" : "false");
+        base = replace_first(base, "?tlsset?", tlsset);
+    }
+
+    base = replace_first(base, "?tls?", tls);
+    base = replace_first(base, "?tcpset?", "null");
+    base = replace_first(base, "?wsset?", "null");
+    base = replace_first(base, "?tlsset?", "null");
+    base = replace_first(base, "?kcpset?", "null");
+    base = replace_first(base, "?h2set?", "null");
+    base = replace_first(base, "?quicset?", "null");
+
+    return base;
+}
+
+//vless
+std::string vlessConstruct(const std::string &group, const std::string &remarks, const std::string &add, const std::string &port, const std::string &type, const std::string &id, const std::string &aid, const std::string &net, const std::string &cipher, const std::string &path, const std::string &host, const std::string &edge, const std::string &tls, tribool udp, tribool tfo, tribool scv, tribool tls13)
+{
+    std::string base = base_vless;
+    base = replace_first(base, "?localport?", std::to_string(socksport));
+    base = replace_first(base, "?add?", add);
+    base = replace_first(base, "?port?", port);
+    base = replace_first(base, "?id?", id);
+    base = replace_first(base, "?aid?", aid.empty() ? "0" : aid);
+    base = replace_first(base, "?net?", net.empty() ? "tcp" : net);
+    base = replace_first(base, "?cipher?", cipher);
+    switch(hash_(net))
+    {
+        case "ws"_hash:
+        {
+            std::string wsset = wsset_vless;
+            wsset = replace_first(wsset, "?host?", (host.empty() && !isIPv4(add) && !isIPv6(add)) ? add : trim(host));
+            wsset = replace_first(wsset, "?path?", path.empty() ? "/" : path);
+            wsset = replace_first(wsset, "?edge?", edge.empty() ? "" : ",\"Edge\":\"" + edge + "\"");
+            base = replace_first(base, "?wsset?", wsset);
+            break;
+        }
+        case "kcp"_hash:
+        {
+            std::string kcpset = kcpset_vless;
+            kcpset = replace_first(kcpset, "?type?", type);
+            base = replace_first(base, "?kcpset?", kcpset);
+            break;
+        }
+        case "h2"_hash:
+        case "http"_hash:
+        {
+            std::string h2set = h2set_vless;
+            h2set = replace_first(h2set, "?path?", path);
+            string_array hosts = split(host, ",");
+            h2set = replace_first(h2set, "?host?", std::accumulate(std::next(hosts.begin()), hosts.end(), std::string("\"" + hosts[0] + "\""), [](auto before, auto current){ return before + ",\"" + current + "\""; }));
+            base = replace_first(base, "?h2set?", h2set);
+            break;
+        }
+        case "quic"_hash:
+        {
+            std::string quicset = quicset_vless;
+            quicset = replace_first(quicset, "?host?", host);
+            quicset = replace_first(quicset, "?path?", path);
+            quicset = replace_first(quicset, "?type?", type);
+            base = replace_first(base, "?quicset?", quicset);
+            break;
+        }
+        case "tcp"_hash:
+            break;
+    }
+    if(type == "http")
+    {
+        std::string tcpset = tcpset_vless;
+        tcpset = replace_first(tcpset, "?host?", (host.empty() && !isIPv4(add) && !isIPv6(add)) ? add : trim(host));
+        tcpset = replace_first(tcpset, "?type?", type);
+        tcpset = replace_first(tcpset, "?path?", path.empty() ? "/" : path);
+        base = replace_first(base, "?tcpset?", tcpset);
+    }
+    if(host.size())
+    {
+        std::string tlsset = tlsset_vless;
         tlsset = replace_first(tlsset, "?serverName?", host);
         scv.define(true);
         tlsset = replace_first(tlsset, "?verify?", scv ? "true" : "false");
