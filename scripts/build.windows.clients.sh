@@ -110,7 +110,8 @@ curl -LO https://github.com/shadowsocksrr/shadowsocksr-csharp/releases/download/
 7z x ShadowsocksR-win-4.9.2.zip ShadowsocksR-win-4.9.2/ShadowsocksR-dotnet2.0.exe
 mv ShadowsocksR-win-4.9.2/ShadowsocksR-dotnet2.0.exe built/shadowsocksr-win.exe
 
-unzip v2ray*.zip Xray*.zip xray.exe v2ray.exe v2ctl.exe
+unzip v2ray*.zip v2ray.exe v2ctl.exe
+unzip Xray*.zip xray.exe
 unzip websocketd*.zip websocketd
 tar xvf v2ray-plugin*.gz
 rm v2ray-plugin*.gz
