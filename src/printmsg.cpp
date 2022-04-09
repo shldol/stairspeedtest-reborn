@@ -16,9 +16,10 @@ struct LOOKUP_ITEM
 LOOKUP_ITEM SPEEDTEST_MESSAGES[] =
 {
     {SPEEDTEST_MESSAGE_EOF, "\nSpeed Test done. Press any key to exit..."},
-    {SPEEDTEST_MESSAGE_WELCOME, "Welcome to Stair Speedtest " VERSION "!\nWhich stair do you want to test today? (Supports single Shadowsocks/ShadowsocksD/ShadowsocksR/V2Ray link and their subscribe links)\nIf you want to test more than one link, separate them with '|'.\nLink: "},
+    {SPEEDTEST_MESSAGE_WELCOME, "Welcome to Stair Speedtest " VERSION "!\nWhich stair do you want to test today? (Supports single Shadowsocks/ShadowsocksD/ShadowsocksR/V2Ray/Xray link and their subscribe links)\nIf you want to test more than one link, separate them with '|'.\nLink: "},
     {SPEEDTEST_MESSAGE_MULTILINK, "Multiple link provided, parsing all nodes.\n\n"},
     {SPEEDTEST_MESSAGE_FOUNDVMESS, "Found single V2Ray link.\n"},
+	{SPEEDTEST_MESSAGE_FOUNDVLESS, "Found single Xray link.\n"},
     {SPEEDTEST_MESSAGE_FOUNDSS, "Found single Shadowsocks link.\n"},
     {SPEEDTEST_MESSAGE_FOUNDSSR, "Found single ShadowsocksR link.\n"},
     {SPEEDTEST_MESSAGE_FOUNDTROJAN, "Found single Trojan link.\n"},
@@ -26,7 +27,7 @@ LOOKUP_ITEM SPEEDTEST_MESSAGES[] =
     {SPEEDTEST_MESSAGE_FOUNDNETCH, "Found single Netch link.\n"},
     {SPEEDTEST_MESSAGE_FOUNDSUB, "Found subscribe link.\n"},
     {SPEEDTEST_MESSAGE_FOUNDLOCAL, "Found local configure file.\n"},
-    {SPEEDTEST_MESSAGE_GROUP, "If you have imported an V2Ray subscribe link which doesn't contain a Group Name, you can specify a custom name below.\nIf you have imported an Shadowsocks/ShadowsocksR link which contains a Group Name, press Enter to skip.\nCustom Group Name: "},
+    {SPEEDTEST_MESSAGE_GROUP, "If you have imported an V2Ray/Xray subscribe link which doesn't contain a Group Name, you can specify a custom name below.\nIf you have imported an Shadowsocks/ShadowsocksR link which contains a Group Name, press Enter to skip.\nCustom Group Name: "},
     {SPEEDTEST_MESSAGE_GOTSERVER, "\nCurrent Server Group: ?1? Remarks: ?2? Index: ?0?/?3?\n"},
     {SPEEDTEST_MESSAGE_STARTPING, "Now performing TCP Ping...\n"},
     {SPEEDTEST_MESSAGE_STARTGEOIP, "Now performing GeoIP parse...\n"},
@@ -65,6 +66,7 @@ LOOKUP_ITEM SPEEDTEST_MESSAGES_RPC[] =
     {SPEEDTEST_MESSAGE_WELCOME, "{\"info\":\"started\"}\n"},
     {SPEEDTEST_MESSAGE_EOF, "{\"info\":\"eof\"}\n"},
     {SPEEDTEST_MESSAGE_FOUNDVMESS, "{\"info\":\"foundvmess\"}\n"},
+	{SPEEDTEST_MESSAGE_FOUNDVLESS, "{\"info\":\"foundvless\"}\n"},
     {SPEEDTEST_MESSAGE_FOUNDSS, "{\"info\":\"foundss\"}\n"},
     {SPEEDTEST_MESSAGE_FOUNDSSR, "{\"info\":\"foundssr\"}\n"},
     {SPEEDTEST_MESSAGE_FOUNDTROJAN, "{\"info\":\"foundtrojan\"}\n"},
