@@ -71,7 +71,8 @@ if [[ "$ARCH" = "x86_64" ]];then
     fi
 fi
 
-unzip v2ray*.zip Xray*.zip v2ray xray v2ctl
+unzip v2ray*.zip v2ray xray v2ctl
+unzip Xray*.zip xray
 unzip websocketd*.zip websocketd
 if [[ "$ARCH" = "armhf" ]];then
   tar xvf v2ray-plugin*.gz v2ray-plugin_linux_arm7
